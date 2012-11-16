@@ -1,26 +1,24 @@
 package com.rush;
 
-import java.util.Random;
-
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Resources;
 import android.graphics.*;
 import android.graphics.Paint.Align;
-import android.util.AttributeSet;
-import android.view.*;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.util.AttributeSet;
+import android.view.*;
+
+import java.util.Random;
 
 public class MemylonActivity extends Activity {
-	
 	DrawThread mDrawThread;
 	MainView mView;
 	
 	Bitmap mBgBitmap;
 	Bitmap mCardBitmap;
-	Animation mCardCaptionAnim;
 	
 	Rect mSrcRect = new Rect();
 	Rect mDstRect = new Rect();
@@ -63,7 +61,8 @@ public class MemylonActivity extends Activity {
 		setContentView(mView);
 		mDrawThread = new DrawThread(mView.getHolder());
 		
-		resetGame(5, 4);
+		//startGame(5, 4);
+        startGame(4, 3);
 	}
 	
 	void startDrawingThread() {
@@ -72,12 +71,11 @@ public class MemylonActivity extends Activity {
 	}
 	
 	void stopDrawingThread() {
-		boolean retry = true;
 		mDrawThread.setRunning(false);
-		while (retry) {
+		while (true) {
 			try {
 				mDrawThread.join();
-				retry = false;
+				break;
 			} catch (InterruptedException e) {
 				// keep trying to stop the draw thread
 			}
@@ -85,7 +83,7 @@ public class MemylonActivity extends Activity {
 	}
 	
 	/**
-	 * Randomly shuffles an int array using Fisher–Yates algorithm
+	 * Randomly shuffles an int array using Fisher-Yates algorithm
 	 */
 	public static void shuffleArray(int[] arr, Random generator) {
 		for (int i = arr.length - 1; i > 0; i--) {
@@ -96,7 +94,7 @@ public class MemylonActivity extends Activity {
 		}
 	}
 	
-	void resetGame(int numCardsW, int numCardsH) {
+	void startGame(int numCardsW, int numCardsH) {
 		mNumCardsW = numCardsW;
 		mNumCardsH = numCardsH;
 		
@@ -117,7 +115,6 @@ public class MemylonActivity extends Activity {
 		for (int i = 0; i < numCards; i++) {
 			mCards[i * 2] = mCards[i * 2 + 1] = -variations[i];
 		}
-		
 		shuffleArray(mCards, randGen);
 	}
 	
@@ -193,7 +190,7 @@ public class MemylonActivity extends Activity {
 		public boolean onTouchEvent(MotionEvent event) {
 			if (mIsGameEnded) {
 				mIsGameEnded = false;
-				resetGame(mNumCardsW + 1, mNumCardsH + 1);
+				startGame(mNumCardsW + 1, mNumCardsH + 1);
 				return true;
 			}
 			int touchX = (int) event.getX();
@@ -207,7 +204,6 @@ public class MemylonActivity extends Activity {
 			if (mCardAnims[cardIdx] == null && cardID != 0 && cardIdx != mFlippedCardIdx)
 			{
 				CardAnimation nextAnim = null;
-				
 				if (mFlippedCardIdx == -1) {
 					//  no other cards are flipped
 					mFlippedCardIdx = cardIdx;
@@ -239,10 +235,10 @@ public class MemylonActivity extends Activity {
 							TextAnimation endCaption = new TextAnimation(caption, 30, 100, 20.0f, null);
 							endCaption.setColor(0xFFAAAABB);
 							mTopAnim = 
-								new TextAnimation("This is it.", 30, 200, 5.0f,
-								new TextAnimation("The language wars", 30, 100, 5.0f, 
-								new TextAnimation("ARE OVER.", 30, 200, 7.0f,
-								new TextAnimation("...and the winner is", 2, 50, 8.0f, endCaption))));
+								new TextAnimation("This is it.", 30, 200, 2.0f,
+								new TextAnimation("The language wars", 30, 100, 2.0f,
+								new TextAnimation("ARE OVER.", 30, 200, 3.0f,
+								new TextAnimation("...and the winner is", 2, 50, 7.0f, endCaption))));
 						}
 						
 					} else {
@@ -316,7 +312,10 @@ public class MemylonActivity extends Activity {
 			}
 		}
 	}
-	
+
+    /**
+     * Base class for the game animations
+     */
 	class Animation {
 		protected float mDuration = 0.5f;
 		protected float mCurTime = 0.0f;
@@ -358,8 +357,11 @@ public class MemylonActivity extends Activity {
 		public void draw(Canvas canvas) {
 		}
 	}
-	
-	class CardAnimation extends Animation {
+
+    /**
+     * Base class for card animations
+     */
+    class CardAnimation extends Animation {
 		protected int mCardIdx = -1;
 		protected int mCardID = -1;
 		
@@ -369,8 +371,11 @@ public class MemylonActivity extends Activity {
 			mCardID = cardID;
 		}
 	}
-	
-	class IdleCardAnimation extends CardAnimation {
+
+    /**
+     * The "idle" card animation (draws the card in static position)
+     */
+    class IdleCardAnimation extends CardAnimation {
 		public IdleCardAnimation(int cardIdx, int cardID, CardAnimation nextAnim) {
 			super(cardIdx, cardID, nextAnim);
 		}
@@ -381,8 +386,11 @@ public class MemylonActivity extends Activity {
 			drawCard(canvas, mCardIdx, cardID, 1.0f, null);
 		}
 	}
-	
-	class FlipCardAnimation extends CardAnimation {
+
+    /**
+     * Card flipping animation
+     */
+    class FlipCardAnimation extends CardAnimation {
 		public FlipCardAnimation(int cardIdx, int cardID, CardAnimation nextAnim) {
 			super(cardIdx, cardID, nextAnim);
 		}
@@ -394,8 +402,11 @@ public class MemylonActivity extends Activity {
 			drawCard(canvas, mCardIdx, cardID, (float) Math.abs(scale), null);
 		}
 	}
-	
-	class DissolveCardAnimation extends CardAnimation {
+
+    /**
+     * Card dissolving animation
+     */
+    class DissolveCardAnimation extends CardAnimation {
 		private Paint mPaint = new Paint();
 		public DissolveCardAnimation(int cardIdx, int cardID, CardAnimation nextAnim) {
 			super(cardIdx, cardID, nextAnim);
@@ -408,8 +419,11 @@ public class MemylonActivity extends Activity {
 			drawCard(canvas, mCardIdx, cardID, 1.0f, mPaint);
 		}
 	}
-	
-	class TextAnimation extends Animation {
+
+    /**
+     * Flying colored text animation
+     */
+    class TextAnimation extends Animation {
 		private int mStartTextSize = 30;
 		private int mEndTextSize = 300;
 		private String mCaption = "";

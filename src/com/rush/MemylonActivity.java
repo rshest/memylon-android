@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.*;
+import android.widget.FrameLayout;
 
 import java.util.Random;
 
@@ -33,13 +34,13 @@ public class MemylonActivity extends Activity {
 
     int mFlippedCardIdx = -1;
     boolean mIsGameEnded = false;
+    int mNumMisses = 0;
 
     int mNumCardsH;
     int mNumCardsW;
 
     private static final int CARD_W = 64;
     private static final int CARD_H = 60;
-    private static final int CARDS_IN_ATLAS_ROW = 12;
     private static final int CARDS_NUM_VARIATIONS = 120;
 
     class SpriteAtlas {
@@ -67,6 +68,11 @@ public class MemylonActivity extends Activity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
+        setContentView(R.layout.main);
+        FrameLayout layout = (FrameLayout)findViewById(R.id.top_layout);
+        mView = new MainView(this, null);
+        layout.addView(mView, 0);
+
         //  load resources
         Resources res = getResources();
         mCardNames = res.getStringArray(R.array.card_names);
@@ -76,11 +82,10 @@ public class MemylonActivity extends Activity {
         mCardsFg = new SpriteAtlas(R.drawable.cards_fg, 12, 64, 60);
         mCardsBg = new SpriteAtlas(R.drawable.cards_bg, 2, 64, 60);
 
-        mView = new MainView(this, null);
-        setContentView(mView);
+
         mDrawThread = new DrawThread(mView.getHolder());
 
-        startGame(5, 4);
+        startGame(3, 2);
     }
 
     void startDrawingThread() {
@@ -115,6 +120,7 @@ public class MemylonActivity extends Activity {
     void startGame(int numCardsW, int numCardsH) {
         mNumCardsW = numCardsW;
         mNumCardsH = numCardsH;
+        mNumMisses = 0;
 
         Random randGen = new Random();
         // select random subset of available card variations
@@ -137,8 +143,10 @@ public class MemylonActivity extends Activity {
     }
 
     public void drawSprite(Canvas canvas, SpriteAtlas atlas, int spriteID, Rect dstRect, Paint paint) {
-        mSrcRect.offsetTo((spriteID % atlas.mSpritesInRow) * atlas.mSpriteW,
-                (spriteID / atlas.mSpritesInRow) * atlas.mSpriteH);
+        mSrcRect.left   = (spriteID % atlas.mSpritesInRow) * atlas.mSpriteW;
+        mSrcRect.top    = (spriteID / atlas.mSpritesInRow) * atlas.mSpriteH;
+        mSrcRect.right  = mSrcRect.left + CARD_W;
+        mSrcRect.bottom = mSrcRect.top + CARD_H;
         canvas.drawBitmap(atlas.mBitmap, mSrcRect, mDstRect, paint);
     }
 
@@ -147,12 +155,25 @@ public class MemylonActivity extends Activity {
         if (cardID == 0) {
             return;
         }
+
         int cardI = cardIdx % mNumCardsW;
         int cardJ = cardIdx / mNumCardsW;
         int cardW = canvas.getWidth() / mNumCardsW;
         int cardH = canvas.getHeight() / mNumCardsH;
+        int cardS = Math.min(cardW, cardH);
+
+        int cx = cardI * cardS;
+        int cy = cardJ * cardH;
+
+        if (cardS < cardW) {
+            cx += (canvas.getWidth() - cardW*mNumCardsW)/2;
+        } else {
+            cy += (canvas.getHeight() - cardH*mNumCardsH)/2;
+        }
+
+        mDstRect.set(cx, cy, cx + cardW, cy + cardH);
+
         int cardSW = (int) (((float) cardW) * cardScale);
-        mDstRect.offsetTo(cardI * cardW, cardJ * cardH);
         mDstRect.left += (cardW - cardSW) / 2;
         mDstRect.right = mDstRect.left + cardSW;
         if (cardID > 0) {
@@ -193,11 +214,6 @@ public class MemylonActivity extends Activity {
             mSrcRect.set(0, 0, mBgBitmap.getWidth(), mBgBitmap.getHeight());
             mDstRect.set(0, 0, getWidth(), getHeight());
             canvas.drawBitmap(mBgBitmap, mSrcRect, mDstRect, null);
-
-            int cardW = getWidth() / mNumCardsW;
-            int cardH = getHeight() / mNumCardsH;
-            mDstRect.set(0, 0, cardW, cardH);
-            mSrcRect.set(0, 0, CARD_W, CARD_H);
 
             int numCards = mCards.length;
             for (int i = 0; i < numCards; i++) {
@@ -257,7 +273,9 @@ public class MemylonActivity extends Activity {
                             }
                         }
                         if (bAllFlipped) {
+                            //  TODO: the screen with results (field size, num flips, place in high scores, winning language, fun fact about it)
                             mIsGameEnded = true;
+                            /*
                             TextAnimation endCaption = new TextAnimation(caption, 30, 100, 20.0f, null);
                             endCaption.setColor(0xFFAAAABB);
                             mTopAnim =
@@ -265,10 +283,10 @@ public class MemylonActivity extends Activity {
                                 new TextAnimation("The language wars", 30, 100, 2.0f,
                                 new TextAnimation("ARE OVER.", 30, 200, 3.0f,
                                 new TextAnimation("...and the winner is", 2, 50, 7.0f, endCaption))));
+                             */
                         }
-
                     } else {
-                        //  flip both cards back
+                        //  the second flipped card does not match - flip both cards back
                         mCardAnims[mFlippedCardIdx] =
                                 new IdleCardAnimation(mFlippedCardIdx, flippedCardFace,
                                 new IdleCardAnimation(mFlippedCardIdx, flippedCardFace,
@@ -276,6 +294,23 @@ public class MemylonActivity extends Activity {
                         nextAnim = new FlipCardAnimation(cardIdx, -cardFace, null);
                         mCards[mFlippedCardIdx] = -mCards[mFlippedCardIdx];
                         mCards[cardIdx] = -mCards[cardIdx];
+
+                        //  update the misses counter and spawn its text animation
+                        mNumMisses++;
+                        String strNumMisses = Integer.toString(mNumMisses) + (mNumMisses == 1 ? " miss" : " misses");
+                        TextAnimation missAnim = new TextAnimation(strNumMisses, 0, getHeight(), 2.0f, null);
+                        //  set the "miss" text color according to the "miss rate severity"
+                        //  TODO: less ugly color palette
+                        int nBestCaseFlips = mNumCardsH*mNumCardsW/2 + 1;
+                        int nWorstCaseFlips = mNumCardsH*mNumCardsW;
+                        if (mNumMisses > nWorstCaseFlips) {
+                            missAnim.setColor(0xFFFF2222);
+                        } else if (mNumMisses > nBestCaseFlips) {
+                            missAnim.setColor(0xFFFFFF22);
+                        } else {
+                            missAnim.setColor(0xFF22FF22);
+                        }
+                        mTopAnim = missAnim;
                     }
                     mFlippedCardIdx = -1;
                 }
@@ -455,16 +490,25 @@ public class MemylonActivity extends Activity {
         private String mCaption = "";
 
         private Paint mPaint = new Paint();
+        private Paint mStrokePaint = new Paint();
         public TextAnimation(String caption, int startTextSize, int endTextSize, float duration, Animation nextAnim) {
             super(nextAnim);
             mDuration = duration;
             mCaption = caption;
             mEndTextSize = endTextSize;
             mStartTextSize = startTextSize;
+
             mPaint.setColor(0xFF2222AA);
             mPaint.setTypeface(Typeface.DEFAULT_BOLD);
             mPaint.setAntiAlias(true);
             mPaint.setTextAlign(Align.CENTER);
+
+            mStrokePaint.setColor(0xFF000000);
+            mStrokePaint.setTypeface(Typeface.DEFAULT_BOLD);
+            mStrokePaint.setAntiAlias(true);
+            mStrokePaint.setTextAlign(Align.CENTER);
+            mStrokePaint.setStyle(Paint.Style.STROKE);
+            mStrokePaint.setStrokeWidth(2);
         }
 
         void setColor(int color) {
@@ -473,9 +517,19 @@ public class MemylonActivity extends Activity {
         @Override
         public void draw(Canvas canvas) {
             float textSize = mStartTextSize + (mEndTextSize - mStartTextSize)*mCurTime/mDuration;
-            mPaint.setAlpha((int) (255.0f*(1 - mCurTime/mDuration)));
+            float ratio = mCurTime/mDuration;
+            //  quadratic function - decay faster towards the end
+            int alpha = (int) (255.0f*(1.0f - ratio*ratio));
+            int x = canvas.getWidth()/2;
+            int y = (int)(canvas.getHeight()+ textSize)/2;
+
+            mPaint.setAlpha(alpha);
             mPaint.setTextSize(textSize);
-            canvas.drawText(mCaption, canvas.getWidth()/2, (canvas.getHeight()+ textSize)/2 , mPaint);
+            canvas.drawText(mCaption, x, y, mPaint);
+
+            mStrokePaint.setAlpha(alpha);
+            mStrokePaint.setTextSize(textSize);
+            canvas.drawText(mCaption, x, y, mStrokePaint);
         }
     }
 }

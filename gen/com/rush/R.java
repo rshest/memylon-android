@@ -20,8 +20,8 @@ public final class R {
         public static final int icon=0x7f020003;
     }
     public static final class id {
-        public static final int cardview=0x7f060000;
-        public static final int textview=0x7f060001;
+        public static final int num_misses=0x7f060001;
+        public static final int top_layout=0x7f060000;
     }
     public static final class layout {
         public static final int main=0x7f030000;

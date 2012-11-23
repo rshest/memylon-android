@@ -12,6 +12,10 @@ import android.util.AttributeSet;
 import android.view.*;
 import android.widget.FrameLayout;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.Random;
 
 public class MemylonActivity extends Activity {
@@ -25,8 +29,9 @@ public class MemylonActivity extends Activity {
 
     Rect mSrcRect = new Rect();
     Rect mDstRect = new Rect();
+    Rect mBoardRect = new Rect(0, 0, 1, 1);
 
-    String[] mCardNames;
+    ArrayList<String> mCardNames = new ArrayList<String>();
 
     int[] mCards;
     Animation[] mCardAnims;
@@ -41,7 +46,7 @@ public class MemylonActivity extends Activity {
 
     private static final int CARD_W = 64;
     private static final int CARD_H = 60;
-    private static final int CARDS_NUM_VARIATIONS = 120;
+    private static final int CARDS_NUM_VARIATIONS = 12*12;
 
     class SpriteAtlas {
         public int mSpriteW;
@@ -75,13 +80,27 @@ public class MemylonActivity extends Activity {
 
         //  load resources
         Resources res = getResources();
-        mCardNames = res.getStringArray(R.array.card_names);
-        assert(mCardNames.length == CARDS_NUM_VARIATIONS);
         mBgBitmap = BitmapFactory.decodeResource(res, R.drawable.background);
 
         mCardsFg = new SpriteAtlas(R.drawable.cards_fg, 12, 64, 60);
         mCardsBg = new SpriteAtlas(R.drawable.cards_bg, 2, 64, 60);
 
+        //   load cards info
+        try {
+            InputStream in = getAssets().open("languages.txt");
+            BufferedReader bin = new BufferedReader(new InputStreamReader(in));
+            while (true) {
+                String line = bin.readLine();
+                if (line == null) break;
+                String[] parts = line.split("\\|");
+                if (parts.length == 2) {
+                    mCardNames.add(parts[1]);
+                }
+            }
+            assert(mCardNames.size() == CARDS_NUM_VARIATIONS);
+        } catch (java.io.IOException e) {
+            System.out.println("Failed to load the languages description");
+        }
 
         mDrawThread = new DrawThread(mView.getHolder());
 
@@ -158,21 +177,12 @@ public class MemylonActivity extends Activity {
 
         int cardI = cardIdx % mNumCardsW;
         int cardJ = cardIdx / mNumCardsW;
-        int cardW = canvas.getWidth() / mNumCardsW;
-        int cardH = canvas.getHeight() / mNumCardsH;
-        int cardS = Math.min(cardW, cardH);
+        int cardW = mBoardRect.width() / mNumCardsW;
+        int cardH = mBoardRect.height() / mNumCardsH;
 
-        int cx = cardI * cardS;
-        int cy = cardJ * cardH;
-
-        if (cardS < cardW) {
-            cx += (canvas.getWidth() - cardW*mNumCardsW)/2;
-        } else {
-            cy += (canvas.getHeight() - cardH*mNumCardsH)/2;
-        }
-
+        int cx = cardI * cardW + mBoardRect.left;
+        int cy = cardJ * cardH + mBoardRect.top;
         mDstRect.set(cx, cy, cx + cardW, cy + cardH);
-
         int cardSW = (int) (((float) cardW) * cardScale);
         mDstRect.left += (cardW - cardSW) / 2;
         mDstRect.right = mDstRect.left + cardSW;
@@ -215,6 +225,30 @@ public class MemylonActivity extends Activity {
             mDstRect.set(0, 0, getWidth(), getHeight());
             canvas.drawBitmap(mBgBitmap, mSrcRect, mDstRect, null);
 
+            //  calibrate the board extents, so that card aspect ratio distortion is minimized
+            float cardAspect = (float)CARD_W/CARD_H;
+            float targetAspect = cardAspect*mNumCardsW/mNumCardsH;
+            float canvasW = canvas.getWidth();
+            float canvasH = canvas.getHeight();
+            float canvasAspect = canvasW/canvasH;
+            float bx, by, bw, bh;
+            if (targetAspect < canvasAspect) {
+                //  free space to the left/right
+                bh = canvasH;
+                float cardH = canvasH/(float)mNumCardsH;
+                bw = mNumCardsW*cardAspect*cardH;
+                by = 0.0f;
+                bx = (canvasW - bw)/2;
+            } else {
+                //  free space to the top/bottom
+                bw = canvasW;
+                float cardW = canvasW/(float)mNumCardsW;
+                bh = mNumCardsH*cardW/cardAspect;
+                bx = 0.0f;
+                by = (canvasH - bh)/2;
+            }
+            mBoardRect.set((int)bx, (int)by, (int)(bx + bw), (int)(by + bh));
+
             int numCards = mCards.length;
             for (int i = 0; i < numCards; i++) {
                 if (mCardAnims[i] == null) {
@@ -237,10 +271,10 @@ public class MemylonActivity extends Activity {
             }
             int touchX = (int) event.getX();
             int touchY = (int) event.getY();
-            int cardScreenW = getWidth() / mNumCardsW;
-            int cardScreenH = getHeight() / mNumCardsH;
-            int cardI = touchX / cardScreenW;
-            int cardJ = touchY / cardScreenH;
+            int cardScreenW = mBoardRect.width() / mNumCardsW;
+            int cardScreenH = mBoardRect.height() / mNumCardsH;
+            int cardI = (touchX - mBoardRect.left) / cardScreenW;
+            int cardJ = (touchY - mBoardRect.top) / cardScreenH;
             int cardIdx = cardJ * mNumCardsW + cardI;
             int cardFace = mCards[cardIdx];
             if (mCardAnims[cardIdx] == null && cardFace != 0 && cardIdx != mFlippedCardIdx)
@@ -261,7 +295,7 @@ public class MemylonActivity extends Activity {
                                 new DissolveCardAnimation(mFlippedCardIdx, flippedCardFace, null)));
                         nextAnim = new DissolveCardAnimation(cardIdx, cardFace, null);
 
-                        String caption = mCardNames[Math.abs(cardFace) - 1];
+                        String caption = mCardNames.get(Math.abs(cardFace) - 1);
                         mTopAnim = new TextAnimation(caption, 0, getHeight(), 2.0f, null);
 
                         //  check if all the cards are flipped
